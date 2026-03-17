@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+.vscode/
+.ipynb_checkpoints/
+.env
+logs/
+
+models/*.pkl
+vectorstore_psychology/
+splits/
+
