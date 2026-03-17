@@ -1,6 +1,7 @@
 """ECO/AGENT routing logic for MindCare queries."""
 
 import logging
+import re
 from typing import Optional
 
 from src.config import CONFIG
@@ -42,18 +43,21 @@ class MindCareStrategist:
         Returns:
             Tuple of (mode, reason) where mode is "ECO" or "AGENT".
         """
-        text = user_input.lower()
+        text_lower = user_input.lower()
+        words = set(re.sub(r"[^\w\s?]", "", text_lower).split())
         emotion = ml_analysis.get("emotion", "unknown").lower()
         confidence = ml_analysis.get("confidence", 0.0)
 
         # Rule 1: Safety — always escalate danger signals
         for word in self.danger_words:
-            if word in text:
+            if word in words:
                 return "AGENT", f"Safety trigger detected: '{word}'"
 
         # Rule 2: Complexity — questions need LLM reasoning
         for q_word in self.question_words:
-            if q_word in text:
+            if q_word == "?" and "?" in text_lower:
+                return "AGENT", "Question mark detected"
+            if q_word != "?" and q_word in words:
                 return "AGENT", "Complex question detected"
 
         # Rule 3: Confidence — below threshold means uncertain classification
