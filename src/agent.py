@@ -340,8 +340,8 @@ def _validate_response(output: str, intermediate_steps: list) -> tuple[bool, str
     """
     if not output or len(output.strip()) < 20:
         return False, "Response too short"
-
-    if not intermediate_steps:
+    
+    if not intermediate_steps and len(output.strip()) < 100:
         return False, "No tools were used"
 
     useful_keywords = ["advice", "technique", "suggest", "help", "support", "feel", "emotion"]
