@@ -10,3 +10,4 @@ models/*.pkl
 vectorstore_psychology/
 splits/
 
+data/
