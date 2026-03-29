@@ -1,13 +1,41 @@
+# Python
 __pycache__/
 *.pyc
+*.pyo
 .venv/
+*.egg-info/
+dist/
+
+# IDE
 .vscode/
+.idea/
 .ipynb_checkpoints/
+
+# Environment
 .env
 logs/
 
-models/*.pkl
-vectorstore_psychology/
-splits/
+# Large datasets 
+data/emotions.csv
+data/emotions_cleaned_features.csv
 
-data/
+# Derived data 
+splits/
+vectorstore_psychology/
+
+# Large unused models (>100MB)
+models/RandomForest.pkl
+models/MLP_Classifier.pkl
+
+# MLflow local tracking
+mlruns/
+
+# Testing & Quality
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Docker
+*.log
