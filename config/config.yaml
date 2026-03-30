@@ -19,39 +19,86 @@ ml:
     4: "Fear"
     5: "Surprise"
 
-strategist:
-  danger_words:
-    - "suicide"
-    - "kill"
-    - "die"
-    - "death"
-    - "emergency"
-    - "hospital"
-    - "blood"
-    - "hurt"
-    - "pain"
-    - "help"
-    - "112"
-    - "911"
-    - "police"
-    - "danger"
-  question_words:
-    - "how"
-    - "why"
-    - "what"
-    - "explain"
-    - "technique"
-    - "method"
-    - "?"
-    - "can you"
-    - "where"
-  safe_emotions:
-    - "joy"
-    - "love"
-    - "sadness"
-    - "surprise"
-    - "anger"
-    - "fear"
+# =============================================================================
+# Multi-Signal Routing Configuration
+# =============================================================================
+# Replaces the legacy 'strategist' section.
+# Each signal produces a score [0, 1]. The weighted sum determines the mode:
+#   score < low_threshold  → ECO (local processing)
+#   low ≤ score ≤ high     → HYBRID (ECO + LLM verification)
+#   score > high_threshold → AGENT (full LLM reasoning)
+# =============================================================================
+scoring:
+  # Routing thresholds
+  low_threshold: 0.35
+  high_threshold: 0.60
+
+  # Signal weights (should sum to ~1.0 excluding safety which is a veto)
+  weights:
+    safety: 1.0        # Veto power — overrides all other signals
+    confidence: 0.30
+    complexity: 0.25
+    sentiment_shift: 0.25
+
+  # Safety signal — multi-word patterns (replaces danger_words)
+  safety_patterns:
+    # Explicit danger — always trigger veto
+    explicit:
+      - "kill myself"
+      - "kill me"
+      - "want to die"
+      - "end my life"
+      - "end it all"
+      - "suicide"
+      - "suicidal"
+      - "self-harm"
+      - "self harm"
+      - "cut myself"
+      - "overdose"
+      - "jump off"
+      - "hang myself"
+      - "no reason to live"
+      - "better off dead"
+      - "can't go on"
+
+    # Implicit danger — regex patterns for indirect expressions
+    implicit:
+      - "don'?t\\s+want\\s+to\\s+(live|exist|be here|wake up)"
+      - "(no|nothing)\\s+(left|point|reason|purpose)"
+      - "(plan|planning|planned)\\s+to\\s+(end|hurt|harm)"
+      - "goodbye\\s+(everyone|world|all)"
+      - "(final|last)\\s+(letter|note|message|goodbye)"
+
+    # False positive filter — these contexts should NOT trigger safety
+    benign_contexts:
+      - "help me"
+      - "help with"
+      - "can you help"
+      - "need help"
+      - "help understand"
+
+  # Confidence signal — sigmoid parameters
+  confidence_signal:
+    midpoint: 0.60     # Confidence level where score = 0.5
+    steepness: 10.0    # How sharp the transition is
+
+  # Complexity signal — factor weights
+  complexity_factors:
+    length: 0.10       # Longer messages → more complex
+    question: 0.30     # Open-ended questions need LLM
+    temporal: 0.15     # "since last month" → needs context
+    conditional: 0.15  # "what if" → needs reasoning
+    compound: 0.15     # Multiple topics
+    negation: 0.15     # "not unhappy" → nuanced
+
+  # Sentiment shift signal — valence mapping
+  emotion_valence:
+    sadness: -0.8
+    anger: -0.6
+    fear: -0.7
+    surprise: 0.0
+    love: 0.8
+    joy: 0.9
 
 agent:
   model_name: "mistral-large-latest"
@@ -67,7 +114,7 @@ carbon:
   system_prompt_tokens: 1000
   tool_tokens_per_call: 200
   iteration_overhead_tokens: 100
-  uncertainty_pct: 20
+  uncertain_pct: 20
 
 geolocation:
   nominatim_url: "https://nominatim.openstreetmap.org/search"
@@ -103,89 +150,33 @@ ui:
   typing_delay_ms: 50
 
 context_keywords:
-  work:
-    - "work"
-    - "job"
-    - "office"
-    - "boss"
-    - "colleague"
-    - "meeting"
-    - "deadline"
-    - "project"
-    - "career"
-  relationship:
-    - "partner"
-    - "boyfriend"
-    - "girlfriend"
-    - "spouse"
-    - "husband"
-    - "wife"
-    - "relationship"
-    - "dating"
-    - "breakup"
-  academic:
-    - "exam"
-    - "test"
-    - "study"
-    - "university"
-    - "school"
-    - "homework"
-    - "assignment"
-    - "grade"
-    - "student"
-  health:
-    - "sick"
-    - "ill"
-    - "pain"
-    - "doctor"
-    - "hospital"
-    - "medical"
-    - "health"
-    - "symptoms"
-    - "treatment"
-  financial:
-    - "money"
-    - "bills"
-    - "debt"
-    - "salary"
-    - "expensive"
-    - "cost"
-    - "budget"
-    - "financial"
-  family:
-    - "family"
-    - "parent"
-    - "mother"
-    - "father"
-    - "sibling"
-    - "brother"
-    - "sister"
-    - "child"
-    - "kids"
-  social:
-    - "friend"
-    - "friends"
-    - "party"
-    - "social"
-    - "lonely"
-    - "isolated"
-    - "people"
+  work: ["work", "job", "office", "boss", "colleague", "meeting", "deadline", "project", "career"]
+  relationship: ["partner", "boyfriend", "girlfriend", "spouse", "husband", "wife", "relationship", "dating", "breakup"]
+  academic: ["exam", "test", "study", "university", "school", "homework", "assignment", "grade", "student"]
+  health: ["sick", "ill", "pain", "doctor", "hospital", "medical", "health", "symptoms", "treatment"]
+  financial: ["money", "bills", "debt", "salary", "expensive", "cost", "budget", "financial"]
+  family: ["family", "parent", "mother", "father", "sibling", "brother", "sister", "child", "kids"]
+  social: ["friend", "friends", "party", "social", "lonely", "isolated", "people"]
 
 intensity_keywords:
-  severe:
-    - "extremely"
-    - "very"
-    - "so much"
-    - "terrible"
-    - "awful"
-    - "devastated"
-    - "overwhelmed"
-    - "intense"
-    - "severe"
-  mild:
-    - "a bit"
-    - "slightly"
-    - "little"
-    - "somewhat"
-    - "kind of"
-    - "sort of"
+  severe: ["extremely", "very", "so much", "terrible", "awful", "devastated", "overwhelmed", "intense", "severe"]
+  mild: ["a bit", "slightly", "little", "somewhat", "kind of", "sort of"]
+
+# --- New Management Sections ---
+
+# Conversation memory
+memory:
+  max_history_messages: 5           # Truncation for ECO mode
+  summary_threshold_messages: 10    # Trigger summarization in AGENT/HYBRID
+  summary_max_tokens: 200           # Max tokens for summary
+
+# Semantic cache
+cache:
+  enabled: true
+  similarity_threshold: 0.92       # Cosine similarity to consider a cache hit
+  max_entries: 100                  # Max cached responses per session
+
+# LangSmith (optional)
+langsmith:
+  enabled: false                    # Overridden by LANGCHAIN_TRACING_V2 env var
+  project: "mindcare-agent"
