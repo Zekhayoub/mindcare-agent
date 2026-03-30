@@ -1,0 +1,42 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Git
+.git/
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+.ipynb_checkpoints/
+
+# Environment secrets
+.env
+
+# Large unused models
+models/RandomForest.pkl
+models/MLP_Classifier.pkl
+
+# Large datasets 
+data/emotions.csv
+data/emotions_cleaned_features.csv
+
+# Derived data
+splits/
+mlruns/
+
+# Testing & Quality 
+tests/
+htmlcov/
+.coverage
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Documentation
+*.md
+LICENSE
