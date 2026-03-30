@@ -1,0 +1,57 @@
+[project]
+name = "mindcare-agent"
+version = "2.0.0"
+description = "Carbon-aware emotional support agent with multi-signal routing"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "Zekhayoub" },
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function call in argument defaults
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Progressive
+check_untyped_defs = true
+ignore_missing_imports = true  # External libs without stubs
+
+[[tool.mypy.overrides]]
+module = "src.signals"
+disallow_untyped_defs = true   # Strict on new modules
+
+[[tool.mypy.overrides]]
+module = "src.scorer"
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: fast pure-function tests",
+    "integration: tests involving multiple modules or I/O",
+    "smoke: tests that load real models",
+]
+addopts = "-v --tb=short"
+
