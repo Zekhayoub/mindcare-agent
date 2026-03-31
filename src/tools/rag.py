@@ -30,9 +30,19 @@ class RAGRetriever:
         """Load the FAISS vectorstore."""
         api_key = os.getenv("MISTRAL_API_KEY")
 
-        # Original: single vague error message
-        if not vs_path.exists() or not api_key:
-            logger.warning("RAG vectorstore not loaded (path or API key missing)")
+        if not api_key:
+            logger.warning(
+                "RAG disabled: MISTRAL_API_KEY not set. "
+                "ECO mode will work without clinical excerpts."
+            )
+            return
+
+        if not vs_path.exists():
+            logger.warning(
+                "Vectorstore not found at %s. "
+                "Run notebook 3 or enable auto-build to create it.",
+                vs_path,
+            )
             return
 
         try:
@@ -114,4 +124,3 @@ class RAGRetriever:
             return f"Knowledge base error: {exc}"
         
 
-        
