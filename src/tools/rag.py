@@ -209,9 +209,15 @@ class RAGRetriever:
                         content = truncated[:last_newline].rstrip()
                     else:
                         content = truncated + "..."
+            
+            # Extract source filename from FAISS metadata
+            source_path = doc.metadata.get("source", "Unknown source")
+            source_name = Path(source_path).name if source_path else "Unknown"
 
-            # Return content only 
-            return {"content": content, "source": "Unknown"}
+            return {
+                "content": content,
+                "source": source_name,
+            }
 
         except Exception as exc:
             logger.error("RAG excerpt retrieval failed: %s", exc)
