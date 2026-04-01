@@ -4,7 +4,7 @@ paths:
   model_dir: "models"
   vectorstore_dir: "vectorstore_psychology"
   advice_db: "data/conseils_emotions.csv"
-  source_dir: "data/source"
+  source_dir: "data/source"                  # For RAG documents
   splits_dir: "splits"
   figures_dir: "figures"
 
