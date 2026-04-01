@@ -154,31 +154,50 @@ class RAGRetriever:
         """Check if the vectorstore is ready for queries."""
         return self.vector_db is not None
 
-    def get_clinical_excerpt(self, query: str) -> Optional[str]:
-        """Retrieve a clinical excerpt from the RAG vectorstore.
+    def get_clinical_excerpt(
+        self,
+        query: str,
+        context: str = "general",
+    ) -> Optional[dict]:
+        """Retrieve a clinical excerpt with source metadata.
+
+        The query is adapted to the detected context to improve
+        retrieval relevance.
 
         Args:
             query: Search query (emotion or coping strategy).
+            context: Detected situational context from analysis.py.
 
         Returns:
-            Relevant text excerpt (max 500 chars), or None.
+            Dictionary with 'content' and 'source' keys, or None.
         """
         if not self.is_loaded:
             return None
 
         try:
-            # Original naive query — same for all contexts
-            enriched_query = (
-                f"techniques for managing {query} emotion coping strategies"
-            )
+            # Context-aware query construction
+            context_prefixes = {
+                "work": "workplace stress coping techniques for",
+                "relationship": "relationship difficulties support for",
+                "academic": "academic stress management for",
+                "health": "health anxiety coping strategies for",
+                "financial": "financial stress management techniques for",
+                "family": "family conflict resolution strategies for",
+                "social": "social anxiety and loneliness coping for",
+                "general": "techniques for managing",
+            }
+            prefix = context_prefixes.get(context, context_prefixes["general"])
+            enriched_query = f"{prefix} {query} emotion"
+
             results = self.vector_db.similarity_search(enriched_query, k=1)
 
             if not results:
                 return None
 
-            content = results[0].page_content
+            doc = results[0]
+            content = doc.page_content
 
-            # Original: brute truncation at 500 chars
+            # Original brute truncation 
             if len(content) > 500:
                 truncated = content[:500]
                 last_period = truncated.rfind(".")
@@ -188,11 +207,13 @@ class RAGRetriever:
                     else truncated + "..."
                 )
 
-            return content
+            # Return content only 
+            return {"content": content, "source": "Unknown"}
 
         except Exception as exc:
             logger.error("RAG excerpt retrieval failed: %s", exc)
             return None
+        
 
     def query_knowledge_base(self, query: str) -> str:
         """Search the RAG knowledge base for detailed information.
