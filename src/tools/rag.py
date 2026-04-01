@@ -197,15 +197,18 @@ class RAGRetriever:
             doc = results[0]
             content = doc.page_content
 
-            # Original brute truncation 
+            # Truncate at last complete sentence (not mid-list)
             if len(content) > 500:
                 truncated = content[:500]
                 last_period = truncated.rfind(".")
-                content = (
-                    truncated[: last_period + 1]
-                    if last_period > 400
-                    else truncated + "..."
-                )
+                if last_period > 300:
+                    content = truncated[: last_period + 1]
+                else:
+                    last_newline = truncated.rfind("\n")
+                    if last_newline > 200:
+                        content = truncated[:last_newline].rstrip()
+                    else:
+                        content = truncated + "..."
 
             # Return content only 
             return {"content": content, "source": "Unknown"}
