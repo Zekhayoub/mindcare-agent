@@ -10,6 +10,19 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+import spacy
+
+# Load spaCy model once at module level
+try:
+    _nlp = spacy.load("en_core_web_sm")
+    logger.info("spaCy NER model loaded (en_core_web_sm)")
+except OSError:
+    _nlp = None
+    logger.warning(
+        "spaCy model 'en_core_web_sm' not found. "
+        "Run: python -m spacy download en_core_web_sm"
+    )
+
 
 def extract_location(text: str) -> Optional[str]:
     """Detect a location name in user input using regex.
@@ -46,6 +59,47 @@ def extract_location(text: str) -> Optional[str]:
                 return location
 
     return None
+
+def extract_entities(text: str) -> dict:
+    """Extract named entities from user input using spaCy NER.
+
+    Returns location (GPE) for activity recommendation and
+    person names (PERSON) for PII detection.
+
+    Falls back to regex if spaCy model is not loaded.
+
+    Args:
+        text: Raw user message.
+
+    Returns:
+        Dictionary with keys:
+            - location: detected city/country name or None
+            - persons: list of detected person names
+    """
+    if _nlp is None:
+        # Fallback to legacy regex if spaCy not available
+        return {
+            "location": extract_location(text),
+            "persons": [],
+        }
+
+    doc = _nlp(text)
+
+    # Extract first GPE (Geo-Political Entity) as location
+    location = None
+    for ent in doc.ents:
+        if ent.label_ == "GPE":
+            location = ent.text
+            break
+
+    # Extract all PERSON entities for PII detection
+    persons = [ent.text for ent in doc.ents if ent.label_ == "PERSON"]
+
+    return {
+        "location": location,
+        "persons": persons,
+    }
+
 
 
 def format_chat_history(chat_history: list, max_messages: int = 5) -> str:
