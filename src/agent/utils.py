@@ -106,6 +106,39 @@ def extract_entities(text: str) -> dict:
     }
 
 
+def mask_pii(text: str, entities: Optional[dict] = None) -> str:
+    """Mask personally identifiable information in text.
+
+    Replaces detected PERSON names with <PERSON> placeholder.
+    The original text is never sent to the LLM — only the masked
+    version. Location (GPE) is stored separately in the LangGraph
+    state for activity recommendation.
+
+    Note: This is a lightweight PII detection using spaCy NER.
+
+    Args:
+        text: Original user message.
+        entities: Pre-extracted entities from extract_entities().
+            If None, extracts them automatically.
+
+    Returns:
+        Text with PERSON names replaced by <PERSON>.
+    """
+    if entities is None:
+        entities = extract_entities(text)
+
+    masked = text
+    # Replace longest names first to avoid partial replacements
+    for person in sorted(entities.get("persons", []), key=len, reverse=True):
+        masked = masked.replace(person, "<PERSON>")
+
+    if entities.get("persons"):
+        logger.info(
+            "PII masked: %d person name(s) replaced", len(entities["persons"])
+        )
+
+    return masked
+
 
 def format_chat_history(chat_history: list, max_messages: int = 5) -> str:
     """Convert a list of LangChain messages to a string.
