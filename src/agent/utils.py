@@ -23,6 +23,11 @@ except OSError:
         "Run: python -m spacy download en_core_web_sm"
     )
 
+# False positives: common words that spaCy sometimes tags as GPE
+_GPE_FALSE_POSITIVES = {
+    "general", "particular", "real", "local", "personal",
+    "mental", "physical", "emotional", "social", "overall",
+}
 
 def extract_location(text: str) -> Optional[str]:
     """Detect a location name in user input using regex.
@@ -85,10 +90,10 @@ def extract_entities(text: str) -> dict:
 
     doc = _nlp(text)
 
-    # Extract first GPE (Geo-Political Entity) as location
+    # Extract first GPE, filtering known false positives
     location = None
     for ent in doc.ents:
-        if ent.label_ == "GPE":
+        if ent.label_ == "GPE" and ent.text.lower() not in _GPE_FALSE_POSITIVES:
             location = ent.text
             break
 
