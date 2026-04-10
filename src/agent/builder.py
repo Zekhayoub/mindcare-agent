@@ -89,10 +89,17 @@ def build_agent(tools_instance, config: Optional[dict] = None):
         """Useful to search for mental health resources in the knowledge base."""
         return tools_instance.query_knowledge_base(query)
 
-    # All 6 tools included — analyze_emotion will be conditionally
-    # excluded in a later commit when confidence is high
-    tools = [analyze_emotion, get_advice, get_activity, consult_manual,
+    # Base tools — always available
+    tools = [get_advice, get_activity, consult_manual,
              get_gps_coordinates, search_resources]
+
+    # Include analyze_emotion only when pre-analysis is uncertain.
+    # If confidence > 80%, the pre-analysis is reliable — no need
+    # for the LLM to re-analyze. This saves tokens and CO2.
+    # The confidence threshold is read from the agent config.
+    if not hasattr(tools_instance, '_pre_confidence') or \
+       getattr(tools_instance, '_pre_confidence', 0.0) < 0.80:
+        tools.insert(0, analyze_emotion)
 
     # ------------------------------------------------------------------
     # ReAct prompt (will be extracted to prompts.py in Part 5)
