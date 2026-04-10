@@ -68,6 +68,16 @@ def extract_location(text: str) -> Optional[str]:
 def extract_entities(text: str) -> dict:
     """Extract named entities from user input using spaCy NER.
 
+    IMPORTANT: spaCy needs original text (with capitalization) to
+    detect GPE and PERSON entities accurately. The ML classifier
+    should receive lowercased text separately. Do NOT lowercase
+    the input before passing it to this function.
+
+    The calling code should:
+        1. Call extract_entities(original_text) for NER
+        2. Call classifier.classify(original_text) — the classifier
+           handles lowercasing internally via TF-IDF
+
     Returns location (GPE) for activity recommendation and
     person names (PERSON) for PII detection.
 
