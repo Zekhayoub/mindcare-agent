@@ -174,3 +174,30 @@ def format_chat_history(chat_history: list, max_messages: int = 5) -> str:
 
     return "\n".join(lines)
 
+
+
+def detect_language(text: str) -> str:
+    """Detect the language of user input.
+
+    Uses langdetect library. Falls back to "en" if detection fails
+    or if text is too short for reliable detection.
+
+    Args:
+        text: Raw user message.
+
+    Returns:
+        ISO 639-1 language code (e.g., "en", "fr", "nl").
+    """
+    if not text or len(text.strip()) < 10:
+        return "en"
+
+    try:
+        from langdetect import detect
+        lang = detect(text)
+        logger.debug("Language detected: %s", lang)
+        return lang
+    except Exception:
+        logger.debug("Language detection failed, defaulting to 'en'")
+        return "en"
+    
+
