@@ -8,6 +8,6 @@ Sub-modules:
 
 from src.agent.builder import build_agent
 from src.agent.executor import invoke_agent
+from src.agent.utils import extract_location, extract_entities
 
-__all__ = ["build_agent", "invoke_agent"]
-
+__all__ = ["build_agent", "invoke_agent", "extract_location", "extract_entities"]
