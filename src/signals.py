@@ -169,3 +169,52 @@ class SafetySignal(BaseSignal):
             confidence=0.9,
             reason="No safety triggers detected",
         )
+
+
+class ConfidenceSignal(BaseSignal):
+    """Converts classifier confidence into a routing signal.
+
+    First version: binary threshold at 60% (same as original strategist).
+    Confidence >= 60% → score 0.0 (ECO).
+    Confidence < 60% → score 1.0 (AGENT).
+    """
+
+    @property
+    def name(self) -> str:
+        return "confidence"
+
+    @property
+    def weight(self) -> float:
+        return 0.30
+
+    def evaluate(
+        self,
+        text: str,
+        classifier_output: Optional[dict] = None,
+        context: Optional[ConversationContext] = None,
+    ) -> SignalResult:
+        if classifier_output is None:
+            return SignalResult(
+                name=self.name,
+                score=0.8,
+                confidence=0.3,
+                reason="No classifier output — defaulting toward AGENT",
+            )
+
+        clf_confidence = classifier_output.get("confidence", 0.5)
+        threshold = CONFIG["ml"]["confidence_threshold"]  # 0.60
+
+        # Binary threshold — same as original strategist
+        if clf_confidence < threshold:
+            score = 1.0
+        else:
+            score = 0.0
+
+        return SignalResult(
+            name=self.name,
+            score=score,
+            confidence=0.85,
+            reason=f"Classifier confidence {clf_confidence:.1%} vs threshold {threshold:.0%}",
+        )
+    
+    
