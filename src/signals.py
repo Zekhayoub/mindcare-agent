@@ -74,9 +74,10 @@ class BaseSignal(ABC):
 class SafetySignal(BaseSignal):
     """Detects crisis indicators in user input.
 
-    First version: matches isolated words from the config danger_words
-    list. Has known false positives (e.g., "help" triggers on
-    "can you help me study").
+    Uses three layers of detection:
+    1. Explicit multi-word patterns ("kill myself", "want to die")
+    2. Implicit regex patterns for indirect expressions
+    3. Negation awareness ("I'm NOT suicidal" does not trigger)
 
     This signal has VETO power: if triggered, routing goes to AGENT
     regardless of all other signals.
@@ -91,9 +92,37 @@ class SafetySignal(BaseSignal):
         return 1.0
 
     def __init__(self) -> None:
-        # Original danger_words from strategist config
-        strategist_cfg = CONFIG.get("strategist", {})
-        self._danger_words: list[str] = strategist_cfg.get("danger_words", [])
+        scoring_cfg = CONFIG.get("scoring", {})
+        patterns_cfg = scoring_cfg.get("safety_patterns", {})
+
+        # Multi-word explicit patterns
+        self._explicit_patterns: list[str] = patterns_cfg.get("explicit", [])
+
+        # Regex implicit patterns
+        self._implicit_patterns: list[re.Pattern] = []
+        for pattern_str in patterns_cfg.get("implicit", []):
+            try:
+                self._implicit_patterns.append(
+                    re.compile(pattern_str, re.IGNORECASE)
+                )
+            except re.error:
+                logger.warning("Invalid safety pattern: %s", pattern_str)
+
+        # Benign contexts that should NOT trigger safety
+        self._benign_contexts: list[str] = patterns_cfg.get("benign_contexts", [])
+
+    def _is_benign_context(self, text_lower: str) -> bool:
+        """Check if the text contains a benign context for 'help' etc."""
+        return any(ctx in text_lower for ctx in self._benign_contexts)
+
+    def _is_negated(self, text: str, match_start: int) -> bool:
+        """Check if a match is preceded by a negation within 40 chars."""
+        preceding = text[max(0, match_start - 40): match_start]
+        negation_pattern = re.compile(
+            r"\b(not|never|no longer|don'?t|doesn'?t|isn'?t|aren'?t|wasn'?t)\b",
+            re.IGNORECASE,
+        )
+        return bool(negation_pattern.search(preceding))
 
     def evaluate(
         self,
@@ -102,18 +131,37 @@ class SafetySignal(BaseSignal):
         context: Optional[ConversationContext] = None,
     ) -> SignalResult:
         text_lower = text.lower()
-        words = set(re.sub(r"[^\w\s]", "", text_lower).split())
+        triggers_found: list[str] = []
 
-        # Simple word matching — same as original strategist
-        for word in self._danger_words:
-            if word in words:
-                return SignalResult(
-                    name=self.name,
-                    score=1.0,
-                    confidence=0.95,
-                    reason=f"Safety trigger: '{word}'",
-                    is_veto=True,
-                )
+        # Skip if benign context detected
+        if self._is_benign_context(text_lower):
+            return SignalResult(
+                name=self.name,
+                score=0.0,
+                confidence=0.85,
+                reason="Benign context detected — safety not triggered",
+            )
+
+        # Check explicit multi-word patterns
+        for pattern in self._explicit_patterns:
+            idx = text_lower.find(pattern)
+            if idx != -1 and not self._is_negated(text_lower, idx):
+                triggers_found.append(f"explicit: '{pattern}'")
+
+        # Check implicit regex patterns
+        for regex in self._implicit_patterns:
+            match = regex.search(text_lower)
+            if match and not self._is_negated(text_lower, match.start()):
+                triggers_found.append(f"implicit: '{match.group()}'")
+
+        if triggers_found:
+            return SignalResult(
+                name=self.name,
+                score=1.0,
+                confidence=0.95,
+                reason=f"Safety triggers: {', '.join(triggers_found)}",
+                is_veto=True,
+            )
 
         return SignalResult(
             name=self.name,
@@ -121,5 +169,3 @@ class SafetySignal(BaseSignal):
             confidence=0.9,
             reason="No safety triggers detected",
         )
-    
-
