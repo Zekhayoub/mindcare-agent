@@ -233,11 +233,47 @@ class ConfidenceSignal(BaseSignal):
         )
     
 class ComplexitySignal(BaseSignal):
-    """Analyzes linguistic complexity of the input.
+    """Analyzes linguistic complexity to determine if LLM reasoning is needed.
 
-    First version: checks for question words from the config
-    (same as original strategist). Any question → score 1.0.
+    Multi-factor analysis:
+    - Question type (open-ended vs closed)
+    - Message length (longer = more context to process)
+    - Temporal references ("since last month" = narrative context)
+    - Conditional language ("what if" = hypothetical reasoning)
+    - Compound topics (multiple conjunctions)
+    - Negation complexity ("not unhappy" = nuanced)
+
+    Each factor produces a score, weighted and summed.
     """
+
+    OPEN_ENDED_PATTERNS: list[re.Pattern] = [
+        re.compile(r"\b(why|how come|what should|what can|how do|how can)\b", re.I),
+        re.compile(r"\b(explain|help me understand|tell me about)\b", re.I),
+    ]
+
+    CLOSED_QUESTION_PATTERNS: list[re.Pattern] = [
+        re.compile(r"\b(are you|is it|do you|can I|will you)\b.*\?", re.I),
+    ]
+
+    TEMPORAL_PATTERNS: list[re.Pattern] = [
+        re.compile(r"\b(since|for the past|for \d+|last \w+|recently|lately)\b", re.I),
+        re.compile(r"\b(months?|years?|weeks?|days?) (ago|now|later)\b", re.I),
+    ]
+
+    CONDITIONAL_PATTERNS: list[re.Pattern] = [
+        re.compile(r"\b(if|what if|suppose|assuming|would|could|might)\b", re.I),
+    ]
+
+    COMPOUND_CONJUNCTIONS: list[re.Pattern] = [
+        re.compile(r"\b(but also|and also|moreover|furthermore|on the other hand)\b", re.I),
+        re.compile(r"\b(however|although|even though|despite)\b", re.I),
+    ]
+
+    NEGATION_COMPLEXITY: list[re.Pattern] = [
+        re.compile(r"\bnot\s+\w+\s+but\b", re.I),
+        re.compile(r"\b(not|never)\s+(really|quite|exactly|entirely)\b", re.I),
+        re.compile(r"\bdon'?t\s+(know|think|feel|believe)\s+(if|that|whether)\b", re.I),
+    ]
 
     @property
     def name(self) -> str:
@@ -248,42 +284,59 @@ class ComplexitySignal(BaseSignal):
         scoring_cfg = CONFIG.get("scoring", {})
         return scoring_cfg.get("weights", {}).get("complexity", 0.25)
 
-    def __init__(self) -> None:
-        strategist_cfg = CONFIG.get("strategist", {})
-        self._question_words: list[str] = strategist_cfg.get("question_words", [])
-
     def evaluate(
         self,
         text: str,
         classifier_output: Optional[dict] = None,
         context: Optional[ConversationContext] = None,
     ) -> SignalResult:
-        text_lower = text.lower()
-        words = set(re.sub(r"[^\w\s?]", "", text_lower).split())
+        factors: dict[str, float] = {}
 
-        # Original logic — any question word → AGENT
-        for q_word in self._question_words:
-            if q_word == "?" and "?" in text_lower:
-                return SignalResult(
-                    name=self.name,
-                    score=1.0,
-                    confidence=0.75,
-                    reason="Question mark detected",
-                )
-            if q_word != "?" and q_word in words:
-                return SignalResult(
-                    name=self.name,
-                    score=1.0,
-                    confidence=0.75,
-                    reason=f"Question word: '{q_word}'",
-                )
+        # Length factor
+        word_count = len(text.split())
+        factors["length"] = min(1.0, word_count / 50.0)
+
+        # Question complexity — open-ended vs closed
+        is_open = any(p.search(text) for p in self.OPEN_ENDED_PATTERNS)
+        is_closed = any(p.search(text) for p in self.CLOSED_QUESTION_PATTERNS)
+        has_question_mark = "?" in text
+
+        if is_open:
+            factors["question"] = 0.8
+        elif is_closed and has_question_mark:
+            factors["question"] = 0.2  # Closed questions don't need LLM
+        elif has_question_mark:
+            factors["question"] = 0.4
+        else:
+            factors["question"] = 0.0
+
+        # Temporal context
+        factors["temporal"] = 0.6 if any(p.search(text) for p in self.TEMPORAL_PATTERNS) else 0.0
+
+        # Conditional language
+        factors["conditional"] = 0.5 if any(p.search(text) for p in self.CONDITIONAL_PATTERNS) else 0.0
+
+        # Compound topics
+        compound_count = sum(1 for p in self.COMPOUND_CONJUNCTIONS if p.search(text))
+        factors["compound"] = min(1.0, compound_count * 0.4)
+
+        # Negation complexity
+        negation_count = sum(1 for p in self.NEGATION_COMPLEXITY if p.search(text))
+        factors["negation"] = min(1.0, negation_count * 0.5)
+
+        # Weighted sum
+        factor_weights = CONFIG.get("scoring", {}).get("complexity_factors", {
+            "length": 0.10, "question": 0.30, "temporal": 0.15,
+            "conditional": 0.15, "compound": 0.15, "negation": 0.15,
+        })
+        score = sum(factors.get(k, 0) * factor_weights.get(k, 0) for k in factor_weights)
+
+        active = [k for k, v in factors.items() if v > 0.3]
 
         return SignalResult(
             name=self.name,
-            score=0.0,
-            confidence=0.7,
-            reason="No complexity indicators detected",
+            score=score,
+            confidence=0.75,
+            reason=f"Complexity {score:.2f} — active: {active or ['none']}",
         )
-    
 
-    
