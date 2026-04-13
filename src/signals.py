@@ -232,3 +232,58 @@ class ConfidenceSignal(BaseSignal):
             ),
         )
     
+class ComplexitySignal(BaseSignal):
+    """Analyzes linguistic complexity of the input.
+
+    First version: checks for question words from the config
+    (same as original strategist). Any question → score 1.0.
+    """
+
+    @property
+    def name(self) -> str:
+        return "complexity"
+
+    @property
+    def weight(self) -> float:
+        scoring_cfg = CONFIG.get("scoring", {})
+        return scoring_cfg.get("weights", {}).get("complexity", 0.25)
+
+    def __init__(self) -> None:
+        strategist_cfg = CONFIG.get("strategist", {})
+        self._question_words: list[str] = strategist_cfg.get("question_words", [])
+
+    def evaluate(
+        self,
+        text: str,
+        classifier_output: Optional[dict] = None,
+        context: Optional[ConversationContext] = None,
+    ) -> SignalResult:
+        text_lower = text.lower()
+        words = set(re.sub(r"[^\w\s?]", "", text_lower).split())
+
+        # Original logic — any question word → AGENT
+        for q_word in self._question_words:
+            if q_word == "?" and "?" in text_lower:
+                return SignalResult(
+                    name=self.name,
+                    score=1.0,
+                    confidence=0.75,
+                    reason="Question mark detected",
+                )
+            if q_word != "?" and q_word in words:
+                return SignalResult(
+                    name=self.name,
+                    score=1.0,
+                    confidence=0.75,
+                    reason=f"Question word: '{q_word}'",
+                )
+
+        return SignalResult(
+            name=self.name,
+            score=0.0,
+            confidence=0.7,
+            reason="No complexity indicators detected",
+        )
+    
+
+    
