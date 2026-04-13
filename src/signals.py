@@ -340,3 +340,93 @@ class ComplexitySignal(BaseSignal):
             reason=f"Complexity {score:.2f} — active: {active or ['none']}",
         )
 
+
+
+class SentimentShiftSignal(BaseSignal):
+    """Detects abrupt emotional transitions in the conversation.
+
+    A user expressing joy 2 messages ago and deep sadness now
+    represents a concerning shift that warrants LLM attention,
+    even if the classifier is confident about the current emotion.
+
+    Uses a valence mapping and exponential decay on recent history.
+    Also detects sustained negative patterns (3+ consecutive
+    negative emotions).
+    """
+
+    @property
+    def name(self) -> str:
+        return "sentiment_shift"
+
+    @property
+    def weight(self) -> float:
+        scoring_cfg = CONFIG.get("scoring", {})
+        return scoring_cfg.get("weights", {}).get("sentiment_shift", 0.25)
+
+    def __init__(self) -> None:
+        scoring_cfg = CONFIG.get("scoring", {})
+        self._valence: dict[str, float] = scoring_cfg.get("emotion_valence", {
+            "sadness": -0.8, "anger": -0.6, "fear": -0.7,
+            "surprise": 0.0, "love": 0.8, "joy": 0.9,
+        })
+
+    def _compute_shift(self, history: list[str], current: str) -> float:
+        """Compute emotional shift magnitude from recent history."""
+        if len(history) < 1:
+            return 0.0
+
+        current_valence = self._valence.get(current, 0.0)
+
+        shifts: list[float] = []
+        for i, emotion in enumerate(reversed(history[-3:])):
+            past_valence = self._valence.get(emotion, 0.0)
+            delta = abs(current_valence - past_valence)
+            recency_weight = 1.0 / (i + 1)
+            shifts.append(delta * recency_weight)
+
+        return min(1.0, max(shifts) / 1.5) if shifts else 0.0
+
+    def evaluate(
+        self,
+        text: str,
+        classifier_output: Optional[dict] = None,
+        context: Optional[ConversationContext] = None,
+    ) -> SignalResult:
+        if context is None or classifier_output is None:
+            return SignalResult(
+                name=self.name,
+                score=0.0,
+                confidence=0.5,
+                reason="Insufficient context for shift detection",
+            )
+
+        current_emotion = classifier_output.get("emotion", "unknown")
+
+        # Guard: unknown emotion → neutral score
+        if current_emotion == "unknown":
+            return SignalResult(
+                name=self.name,
+                score=0.0,
+                confidence=0.4,
+                reason="Unknown emotion — cannot compute shift",
+            )
+
+        shift = self._compute_shift(context.emotion_history, current_emotion)
+        reason_suffix = ""
+
+        # Sustained negative pattern (3+ consecutive negative emotions)
+        if len(context.emotion_history) >= 3:
+            recent = context.emotion_history[-3:]
+            if all(self._valence.get(e, 0.0) < -0.5 for e in recent):
+                shift = max(shift, 0.6)
+                reason_suffix = " + sustained negative pattern"
+
+        return SignalResult(
+            name=self.name,
+            score=shift,
+            confidence=0.7 if len(context.emotion_history) >= 2 else 0.4,
+            reason=f"Sentiment shift: {shift:.2f}{reason_suffix}",
+        )
+    
+
+    
