@@ -172,11 +172,16 @@ class SafetySignal(BaseSignal):
 
 
 class ConfidenceSignal(BaseSignal):
-    """Converts classifier confidence into a routing signal.
+    """Converts classifier confidence into a continuous routing signal.
 
-    First version: binary threshold at 60% (same as original strategist).
-    Confidence >= 60% → score 0.0 (ECO).
-    Confidence < 60% → score 1.0 (AGENT).
+    Uses an inverse sigmoid that creates a smooth transition:
+        95% confidence → score 0.05 (very ECO)
+        80% confidence → score 0.15 (mostly ECO)
+        60% confidence → score 0.50 (uncertain — grey zone)
+        40% confidence → score 0.85 (mostly AGENT)
+        20% confidence → score 0.95 (very AGENT)
+
+    The midpoint and steepness are configurable in config.yaml.
     """
 
     @property
@@ -185,7 +190,19 @@ class ConfidenceSignal(BaseSignal):
 
     @property
     def weight(self) -> float:
-        return 0.30
+        scoring_cfg = CONFIG.get("scoring", {})
+        return scoring_cfg.get("weights", {}).get("confidence", 0.30)
+
+    def __init__(self) -> None:
+        scoring_cfg = CONFIG.get("scoring", {})
+        conf_cfg = scoring_cfg.get("confidence_signal", {})
+        self._midpoint = conf_cfg.get("midpoint", 0.60)
+        self._steepness = conf_cfg.get("steepness", 10.0)
+
+    def _sigmoid_inverse(self, confidence: float) -> float:
+        """Map confidence to routing score using inverse sigmoid."""
+        x = (self._midpoint - confidence) * self._steepness
+        return 1.0 / (1.0 + math.exp(-x))
 
     def evaluate(
         self,
@@ -202,19 +219,16 @@ class ConfidenceSignal(BaseSignal):
             )
 
         clf_confidence = classifier_output.get("confidence", 0.5)
-        threshold = CONFIG["ml"]["confidence_threshold"]  # 0.60
-
-        # Binary threshold — same as original strategist
-        if clf_confidence < threshold:
-            score = 1.0
-        else:
-            score = 0.0
+        emotion = classifier_output.get("emotion", "unknown")
+        score = self._sigmoid_inverse(clf_confidence)
 
         return SignalResult(
             name=self.name,
             score=score,
             confidence=0.85,
-            reason=f"Classifier confidence {clf_confidence:.1%} vs threshold {threshold:.0%}",
+            reason=(
+                f"Classifier: {emotion} at {clf_confidence:.1%} "
+                f"→ routing score {score:.2f}"
+            ),
         )
-    
     
