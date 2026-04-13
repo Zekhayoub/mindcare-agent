@@ -102,26 +102,27 @@ class WeightedScorer:
             ComplexitySignal(),
             SentimentShiftSignal(),
         ]
-
+    
     def _compute_weighted_score(self, results: list[SignalResult]) -> float:
-        """Simple weighted sum — does not factor in signal confidence."""
+        """Confidence-weighted score — signals unsure of themselves weigh less."""
         non_veto = [r for r in results if not r.is_veto]
         if not non_veto:
             return 0.0
 
-        total_weight = sum(s.weight for s in self._signals if s.name != "safety")
-        if total_weight == 0:
-            return 0.5
-
+        total_weight = 0.0
         weighted_sum = 0.0
+
         for result in non_veto:
             signal_weight = next(
                 (s.weight for s in self._signals if s.name == result.name),
                 0.1,
             )
-            weighted_sum += result.score * signal_weight
+            # Factor in signal's own confidence
+            effective_weight = signal_weight * result.confidence
+            weighted_sum += result.score * effective_weight
+            total_weight += effective_weight
 
-        return weighted_sum / total_weight
+        return weighted_sum / total_weight if total_weight > 0 else 0.5
 
     def _classify_score(self, score: float) -> RoutingMode:
         """Map continuous score to discrete routing mode."""
@@ -176,4 +177,3 @@ class WeightedScorer:
         )
     
 
-    
